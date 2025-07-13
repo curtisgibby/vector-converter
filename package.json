@@ -1,0 +1,41 @@
+{
+  "name": "vector-converter",
+  "version": "1.0.0",
+  "description": "A tool to convert vector files and create mockups.",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron .",
+    "dist": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^37.2.1",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "cheerio": "^1.1.0",
+    "express": "^5.1.0",
+    "makerjs": "^0.18.1",
+    "sharp": "^0.34.3"
+  },
+  "build": {
+    "appId": "com.cgibby.vectorconverter",
+    "productName": "Vector Converter",
+    "files": [
+      "main.js",
+      "index.html",
+      "preload.js",
+      "renderer.js"
+    ],
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
