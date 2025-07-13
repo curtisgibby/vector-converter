@@ -61,14 +61,26 @@ async function createDxf(svgPath, outputDir, baseName) {
 
   const combinedModel = { models: {} };
 
-  // Helper to parse nominal height in inches from SVG root attributes
-  function getNominalHeightInches($svgRoot) {
+  // Helper: get nominal SVG height in millimetres.
+  // Priority: explicit mm -> use; explicit in -> convert; otherwise viewBox height as mm (assumption).
+  function getNominalHeightMm($svgRoot) {
     const hAttr = $svgRoot.attr('height');
-    if (hAttr && /in$/i.test(hAttr)) return parseFloat(hAttr);
-    // If only width is given in inches and viewBox ratio is square, use that
+    if (hAttr) {
+      if (/mm$/i.test(hAttr)) return parseFloat(hAttr);
+      if (/in$/i.test(hAttr)) return parseFloat(hAttr) * 25.4;
+    }
     const wAttr = $svgRoot.attr('width');
-    if (wAttr && /in$/i.test(wAttr)) return parseFloat(wAttr);
-    return null; // unknown
+    if (wAttr) {
+      if (/mm$/i.test(wAttr)) return parseFloat(wAttr);
+      if (/in$/i.test(wAttr)) return parseFloat(wAttr) * 25.4;
+    }
+    // Fallback to viewBox
+    const vb = $svgRoot.attr('viewBox');
+    if (vb) {
+      const parts = vb.trim().split(/\s+/);
+      if (parts.length === 4) return parseFloat(parts[3]); // height component
+    }
+    return null;
   }
 
   let i = 0;
@@ -106,8 +118,7 @@ async function createDxf(svgPath, outputDir, baseName) {
 
   // --- Scale model if SVG declares an inch-based height ---
   const $svgRoot = $('svg');
-  const targetHeightIn = getNominalHeightInches($svgRoot);
-  const targetHeightMm = targetHeightIn ? targetHeightIn * 25.4 : null;
+  const targetHeightMm = getNominalHeightMm($svgRoot);
   if (targetHeightMm) {
     const ext = makerjs.measure.modelExtents(combinedModel);
     const currentHeight = ext.high[1] - ext.low[1];
