@@ -56,9 +56,11 @@ window.addEventListener('DOMContentLoaded', () => {
     { name: 'Purple', hex: '#482851' }
   ];
   let selectedSwatch = null;
+  let selectedColorName = 'Custom'; // Default for custom colors
 
-  function selectColor(color, swatchElement = null) {
+  function selectColor(color, swatchElement = null, colorName = 'Custom') {
     colorPicker.value = color;
+    selectedColorName = colorName;
     if (selectedSwatch) selectedSwatch.style.outline = 'none';
     if (swatchElement) {
       swatchElement.style.outline = '2px solid #007aff';
@@ -115,7 +117,7 @@ window.addEventListener('DOMContentLoaded', () => {
       sw.style.backgroundColor = colorObj.hex;
       sw.style.cursor = 'pointer';
       sw.style.border = '1px solid #ccc';
-      sw.addEventListener('click', () => selectColor(colorObj.hex, sw));
+      sw.addEventListener('click', () => selectColor(colorObj.hex, sw, colorObj.name));
       
       // Create label
       const label = document.createElement('div');
@@ -143,7 +145,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const firstSection = colorPalette.children[1]; // Skip header, get swatches container
   const whiteSwatchContainer = firstSection.children[1]; // Second swatch (white)
   const whiteSwatch = whiteSwatchContainer.querySelector('div');
-  selectColor('#fafcf7', whiteSwatch);
+  selectColor('#fafcf7', whiteSwatch, 'White');
 
   // Custom color button
   customColorBtn.addEventListener('click', () => {
@@ -166,6 +168,7 @@ window.addEventListener('DOMContentLoaded', () => {
       svgPath,
       bgImagePath,
       color: colorPicker.value,
+      colorName: selectedColorName,
     });
   });
 

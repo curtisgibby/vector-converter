@@ -167,7 +167,15 @@ function colorizeSvg(svgContent, color) {
   return $.html();
 }
 
-ipcMain.on('generate-files', async (event, { svgPath, bgImagePath, color }) => {
+// Helper function to convert text to kebab-case
+function toKebabCase(str) {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+ipcMain.on('generate-files', async (event, { svgPath, bgImagePath, color, colorName }) => {
   try {
     if (!svgPath) throw new Error('SVG path is missing.');
 
@@ -233,7 +241,10 @@ ipcMain.on('generate-files', async (event, { svgPath, bgImagePath, color }) => {
       await sharp(bgImagePath)
         .composite([{ input: overlayBuffer, gravity: 'center' }])
                 const bgBase = path.basename(bgImagePath, path.extname(bgImagePath));
-        const mockupName = `${baseName}_on_${bgBase}_mockup.png`;
+        const kebabBaseName = toKebabCase(baseName);
+        const kebabBgBase = toKebabCase(bgBase);
+        const kebabColorName = toKebabCase(colorName || 'custom');
+        const mockupName = `${kebabBaseName}-${kebabBgBase}-${kebabColorName}-mockup.png`;
         await sharp(bgImagePath)
           .composite([{ input: overlayBuffer, gravity: 'center' }])
           .toFile(path.join(outputDir, mockupName));
