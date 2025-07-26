@@ -119,17 +119,6 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   window.api.receive('generation-complete', (message) => {
-    if (message === 'INKSCAPE_NOT_FOUND') {
-      const confirmed = confirm(
-        'DXF conversion requires Inkscape to be installed.\n\n' +
-        'Please install it from the official website and make sure it is in your Applications folder.\n\n' +
-        'Click OK to open the Inkscape download page.'
-      );
-      if (confirmed) {
-        window.api.invoke('open-external-link', 'https://inkscape.org/release/inkscape-1.3.2/');
-      }
-    } else {
-      alert(message);
-    }
+    alert(message);
   });
 });
