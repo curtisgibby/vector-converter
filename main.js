@@ -151,7 +151,7 @@ ipcMain.on('generate-files', async (event, { svgPath, bgImagePath, color }) => {
   try {
     if (!svgPath) throw new Error('SVG path is missing.');
 
-    const outputDir = path.join(__dirname, 'output-files');
+    const outputDir = app.getPath('downloads');
     await fs.mkdir(outputDir, { recursive: true });
     const baseName = path.basename(svgPath, '.svg');
     const svgContent = await fs.readFile(svgPath, 'utf-8');
