@@ -143,7 +143,27 @@ async function createDxf(svgPath, outputDir, baseName) {
 
 function colorizeSvg(svgContent, color) {
   const $ = cheerio.load(svgContent, { xmlMode: true });
-  $('path, polyline, polygon').attr('fill', color);
+  
+  $('path, polyline, polygon').each(function() {
+    const $el = $(this);
+    
+    // Set the fill attribute
+    $el.attr('fill', color);
+    
+    // Handle style attribute if it exists
+    const styleAttr = $el.attr('style');
+    if (styleAttr) {
+      // Replace any existing fill declaration in the style attribute
+      const newStyle = styleAttr.replace(/fill:\s*[^;]+/gi, `fill:${color}`);
+      // If no fill was found in style, add it
+      if (!styleAttr.match(/fill:/i)) {
+        $el.attr('style', `${styleAttr};fill:${color}`);
+      } else {
+        $el.attr('style', newStyle);
+      }
+    }
+  });
+  
   return $.html();
 }
 
