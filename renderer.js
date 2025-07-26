@@ -31,8 +31,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const oracalColors = [
     { name: 'Black', hex: '#1f1e1c' },
     { name: 'White', hex: '#fafcf7' },
-    { name: 'Gold', hex: '#643d1e' },
     { name: 'Silver', hex: '#bababa' },
+    { name: 'Gold', hex: '#643d1e' },
     { name: 'Red', hex: '#cc2f28' },
     { name: 'Pastel Orange', hex: '#fe701c' },
     { name: 'Yellow', hex: '#ffcc01' },
@@ -41,6 +41,19 @@ window.addEventListener('DOMContentLoaded', () => {
     { name: 'Purple', hex: '#402572' },
     { name: 'Pink', hex: '#cb3d79' },
     { name: 'Soft Pink', hex: '#f08bb7' }
+  ];
+
+  const siserColors = [
+    { name: 'Black', hex: '#010101' },
+    { name: 'White', hex: '#ffffff' },
+    { name: 'Silver', hex: '#9e9fa3' },
+    { name: 'Brown', hex: '#4c201f' },
+    { name: 'Red', hex: '#cc2129' },
+    { name: 'Orange', hex: '#ef8122' },
+    { name: 'Yellow', hex: '#fecb10' },
+    { name: 'Green', hex: '#14703d' },
+    { name: 'Royal Blue', hex: '#204282' },
+    { name: 'Purple', hex: '#482851' }
   ];
   let selectedSwatch = null;
 
@@ -55,42 +68,80 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Build swatches with labels
-  oracalColors.forEach(colorObj => {
-    // Create container for swatch and label
-    const swatchContainer = document.createElement('div');
-    swatchContainer.style.display = 'flex';
-    swatchContainer.style.flexDirection = 'column';
-    swatchContainer.style.alignItems = 'center';
-    swatchContainer.style.margin = '4px';
+  // Helper function to create color section
+  function createColorSection(title, subtitle, colors) {
+    // Create section header
+    const sectionHeader = document.createElement('div');
+    sectionHeader.style.width = '100%';
+    sectionHeader.style.marginBottom = '8px';
+    sectionHeader.style.marginTop = '12px';
     
-    // Create swatch
-    const sw = document.createElement('div');
-    sw.style.width = '32px';
-    sw.style.height = '32px';
-    sw.style.borderRadius = '4px';
-    sw.style.backgroundColor = colorObj.hex;
-    sw.style.cursor = 'pointer';
-    sw.style.border = '1px solid #ccc';
-    sw.addEventListener('click', () => selectColor(colorObj.hex, sw));
+    const titleEl = document.createElement('div');
+    titleEl.textContent = title;
+    titleEl.style.fontWeight = 'bold';
+    titleEl.style.fontSize = '14px';
+    titleEl.style.color = '#333';
     
-    // Create label
-    const label = document.createElement('div');
-    label.textContent = colorObj.name;
-    label.style.fontSize = '10px';
-    label.style.marginTop = '2px';
-    label.style.textAlign = 'center';
-    label.style.color = '#333';
-    label.style.maxWidth = '50px';
-    label.style.lineHeight = '1.1';
+    const subtitleEl = document.createElement('div');
+    subtitleEl.textContent = subtitle;
+    subtitleEl.style.fontSize = '12px';
+    subtitleEl.style.color = '#666';
+    subtitleEl.style.fontStyle = 'italic';
     
-    swatchContainer.appendChild(sw);
-    swatchContainer.appendChild(label);
-    colorPalette.appendChild(swatchContainer);
-  });
+    sectionHeader.appendChild(titleEl);
+    sectionHeader.appendChild(subtitleEl);
+    colorPalette.appendChild(sectionHeader);
+    
+    // Create swatches container for this section
+    const swatchesContainer = document.createElement('div');
+    swatchesContainer.style.display = 'flex';
+    swatchesContainer.style.flexWrap = 'wrap';
+    swatchesContainer.style.gap = '6px';
+    swatchesContainer.style.marginBottom = '8px';
+    
+    colors.forEach(colorObj => {
+      // Create container for swatch and label
+      const swatchContainer = document.createElement('div');
+      swatchContainer.style.display = 'flex';
+      swatchContainer.style.flexDirection = 'column';
+      swatchContainer.style.alignItems = 'center';
+      swatchContainer.style.margin = '4px';
+      
+      // Create swatch
+      const sw = document.createElement('div');
+      sw.style.width = '32px';
+      sw.style.height = '32px';
+      sw.style.borderRadius = '4px';
+      sw.style.backgroundColor = colorObj.hex;
+      sw.style.cursor = 'pointer';
+      sw.style.border = '1px solid #ccc';
+      sw.addEventListener('click', () => selectColor(colorObj.hex, sw));
+      
+      // Create label
+      const label = document.createElement('div');
+      label.textContent = colorObj.name;
+      label.style.fontSize = '10px';
+      label.style.marginTop = '2px';
+      label.style.textAlign = 'center';
+      label.style.color = '#333';
+      label.style.maxWidth = '50px';
+      label.style.lineHeight = '1.1';
+      
+      swatchContainer.appendChild(sw);
+      swatchContainer.appendChild(label);
+      swatchesContainer.appendChild(swatchContainer);
+    });
+    
+    colorPalette.appendChild(swatchesContainer);
+  }
   
-  // Default select white (second swatch)
-  const whiteSwatchContainer = colorPalette.children[1];
+  // Build color sections
+  createColorSection('Oracal', 'Car decal', oracalColors);
+  createColorSection('Siser', 'Clothing', siserColors);
+  
+  // Default select white from Oracal section (second swatch in first section)
+  const firstSection = colorPalette.children[1]; // Skip header, get swatches container
+  const whiteSwatchContainer = firstSection.children[1]; // Second swatch (white)
   const whiteSwatch = whiteSwatchContainer.querySelector('div');
   selectColor('#fafcf7', whiteSwatch);
 
