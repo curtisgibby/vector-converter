@@ -25,6 +25,9 @@ Electron desktop utility for turning SVG decals into:
 git clone https://github.com/curtisgibby/vector-converter.git
 cd vector-converter
 
+# Use correct Node version (requires nvm)
+nvm use
+
 # Install deps
 npm install
 
@@ -32,7 +35,7 @@ npm install
 npm start
 ```
 
-Requires Node 18+ and the system build tools Sharp needs (on macOS: `xcode-select --install`).
+Requires Node 22+ (see `.nvmrc`) and the system build tools Sharp needs (on macOS: `xcode-select --install`).
 
 ## Usage
 
