@@ -17,7 +17,6 @@
     "electron-builder": "^26.0.12"
   },
   "dependencies": {
-    "@img/sharp-win32-x64": "^0.34.5",
     "cheerio": "^1.1.0",
     "makerjs": "^0.18.1",
     "sharp": "^0.34.5"
@@ -25,7 +24,6 @@
   "build": {
     "appId": "com.cgibby.vectorconverter",
     "productName": "Vector Converter",
-    "npmRebuild": false,
     "files": [
       "main.js",
       "index.html",
