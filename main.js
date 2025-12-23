@@ -144,7 +144,7 @@ async function createDxf(svgPath, outputDir, baseName) {
 function colorizeSvg(svgContent, color) {
   const $ = cheerio.load(svgContent, { xmlMode: true });
   
-  $('path, polyline, polygon').each(function() {
+  $('path, polyline, polygon, text, tspan, rect, circle, ellipse').each(function() {
     const $el = $(this);
     
     // Set the fill attribute
