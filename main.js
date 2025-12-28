@@ -124,8 +124,8 @@ function applyNonUniformScale(model, scaleX, scaleY) {
 }
 
 async function createDxf(svgPath, outputDir, baseName) {
-  // Create DXF whose model height equals the SVG's declared physical height (if any)
-  // and mark the units as inches via $INSUNITS header.
+  // Create DXF with dimensions matching the SVG's declared physical size.
+  // Scales viewBox coordinates to millimeters and sets $INSUNITS header.
   const outputPath = path.join(outputDir, `${baseName}.dxf`);
   const svgContent = await fs.readFile(svgPath, 'utf-8');
 
@@ -133,26 +133,43 @@ async function createDxf(svgPath, outputDir, baseName) {
 
   const combinedModel = { models: {} };
 
-  // Helper: get nominal SVG height in millimetres.
-  // Priority: explicit mm -> use; explicit in -> convert; otherwise viewBox height as mm (assumption).
-  function getNominalHeightMm($svgRoot) {
-    const hAttr = $svgRoot.attr('height');
-    if (hAttr) {
-      if (/mm$/i.test(hAttr)) return parseFloat(hAttr);
-      if (/in$/i.test(hAttr)) return parseFloat(hAttr) * 25.4;
-    }
-    const wAttr = $svgRoot.attr('width');
-    if (wAttr) {
-      if (/mm$/i.test(wAttr)) return parseFloat(wAttr);
-      if (/in$/i.test(wAttr)) return parseFloat(wAttr) * 25.4;
-    }
-    // Fallback to viewBox
+  // Helper: calculate scale factor from SVG declared dimensions vs viewBox.
+  // Returns scale to convert viewBox units to millimeters.
+  function getSvgScaleToMm($svgRoot) {
     const vb = $svgRoot.attr('viewBox');
-    if (vb) {
-      const parts = vb.trim().split(/\s+/);
-      if (parts.length === 4) return parseFloat(parts[3]); // height component
+    if (!vb) return null;
+
+    const parts = vb.trim().split(/\s+/);
+    if (parts.length !== 4) return null;
+
+    const vbWidth = parseFloat(parts[2]);
+    const vbHeight = parseFloat(parts[3]);
+    if (!vbWidth || !vbHeight) return null;
+
+    // Try to get declared physical dimensions
+    const wAttr = $svgRoot.attr('width');
+    const hAttr = $svgRoot.attr('height');
+
+    // Parse width to mm
+    let declaredWidthMm = null;
+    if (wAttr) {
+      if (/mm$/i.test(wAttr)) declaredWidthMm = parseFloat(wAttr);
+      else if (/in$/i.test(wAttr)) declaredWidthMm = parseFloat(wAttr) * 25.4;
     }
-    return null;
+
+    // Parse height to mm
+    let declaredHeightMm = null;
+    if (hAttr) {
+      if (/mm$/i.test(hAttr)) declaredHeightMm = parseFloat(hAttr);
+      else if (/in$/i.test(hAttr)) declaredHeightMm = parseFloat(hAttr) * 25.4;
+    }
+
+    // Calculate scale from whichever dimension is declared
+    if (declaredWidthMm) return declaredWidthMm / vbWidth;
+    if (declaredHeightMm) return declaredHeightMm / vbHeight;
+
+    // No declared dimensions with units - assume viewBox is already in mm
+    return 1;
   }
 
   let i = 0;
@@ -204,22 +221,17 @@ async function createDxf(svgPath, outputDir, baseName) {
     }
   });
 
-  // --- Scale model if SVG declares an inch-based height ---
+  // --- Scale model based on SVG's declared dimensions vs viewBox ---
   const $svgRoot = $('svg');
-  const targetHeightMm = getNominalHeightMm($svgRoot);
-  if (targetHeightMm) {
-    const ext = makerjs.measure.modelExtents(combinedModel);
-    const currentHeight = ext.high[1] - ext.low[1];
-    if (currentHeight > 0) {
-      const scale = targetHeightMm / currentHeight;
-      makerjs.model.scale(combinedModel, scale);
-    }
+  const scaleToMm = getSvgScaleToMm($svgRoot);
+  if (scaleToMm && scaleToMm !== 1) {
+    makerjs.model.scale(combinedModel, scaleToMm);
   }
 
   let dxf = makerjs.exporter.toDXF(combinedModel);
 
-  // --- Inject $INSUNITS header to signal millimetres (4) if targetHeightMm detected ---
-  if (targetHeightMm) {
+  // --- Inject $INSUNITS header to signal millimetres (4) ---
+  if (scaleToMm) {
     // Insert INSUNITS just before the ENDSEC following HEADER section
     dxf = dxf.replace(/(2\nHEADER[\s\S]*?)0\nENDSEC/, (match) => {
       return match.replace('0\nENDSEC', '  9\n$INSUNITS\n 70\n     4\n0\nENDSEC');
