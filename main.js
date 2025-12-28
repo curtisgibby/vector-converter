@@ -40,15 +40,87 @@ ipcMain.handle('open-external-link', (event, url) => {
   shell.openExternal(url);
 });
 
-// Helper function to parse the SVG transform attribute for translations
+// Helper function to parse SVG transform attributes (matrix, translate, scale)
 function parseTransform(transformString) {
-    const translateMatch = /translate\(([^,)]+),?\s*([^,)]+)?\)/.exec(transformString);
-    if (translateMatch) {
-        const x = parseFloat(translateMatch[1]) || 0;
-        const y = parseFloat(translateMatch[2]) || 0;
-        return { x, y };
+    const result = { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1 };
+
+    // Handle matrix(a, b, c, d, e, f) transforms
+    // Matrix: | a c e |  where e,f are translation and a,d are scale (when b,c are 0)
+    //         | b d f |
+    const matrixMatch = /matrix\(\s*([^,\s]+)[\s,]+([^,\s]+)[\s,]+([^,\s]+)[\s,]+([^,\s]+)[\s,]+([^,\s]+)[\s,]+([^,\s]+)\s*\)/.exec(transformString);
+    if (matrixMatch) {
+        const a = parseFloat(matrixMatch[1]);
+        const b = parseFloat(matrixMatch[2]);
+        const c = parseFloat(matrixMatch[3]);
+        const d = parseFloat(matrixMatch[4]);
+        const e = parseFloat(matrixMatch[5]);
+        const f = parseFloat(matrixMatch[6]);
+
+        // Extract scale (works correctly when there's no rotation/skew, i.e., b=c=0)
+        result.scaleX = Math.sqrt(a * a + b * b);
+        result.scaleY = Math.sqrt(c * c + d * d);
+        // Preserve sign of scale
+        if (a < 0) result.scaleX = -result.scaleX;
+        if (d < 0) result.scaleY = -result.scaleY;
+
+        result.translateX = e;
+        result.translateY = f;
+        return result;
     }
-    return { x: 0, y: 0 };
+
+    // Handle translate(x, y) transforms
+    const translateMatch = /translate\(\s*([^,\s)]+)[\s,]*([^,\s)]*)?\s*\)/.exec(transformString);
+    if (translateMatch) {
+        result.translateX = parseFloat(translateMatch[1]) || 0;
+        result.translateY = parseFloat(translateMatch[2]) || 0;
+    }
+
+    // Handle scale(sx, sy) transforms
+    const scaleMatch = /scale\(\s*([^,\s)]+)[\s,]*([^,\s)]*)?\s*\)/.exec(transformString);
+    if (scaleMatch) {
+        result.scaleX = parseFloat(scaleMatch[1]) || 1;
+        result.scaleY = parseFloat(scaleMatch[2]) || result.scaleX; // If sy not provided, use sx
+    }
+
+    return result;
+}
+
+// Helper function to apply non-uniform scaling to a makerjs model
+function applyNonUniformScale(model, scaleX, scaleY) {
+    // Scale all paths in the model
+    if (model.paths) {
+        for (const pathId in model.paths) {
+            const path = model.paths[pathId];
+            if (path.origin) {
+                path.origin[0] *= scaleX;
+                path.origin[1] *= scaleY;
+            }
+            if (path.type === 'line') {
+                // Lines have origin and end
+                if (path.end) {
+                    path.end[0] *= scaleX;
+                    path.end[1] *= scaleY;
+                }
+            } else if (path.type === 'arc') {
+                // Arcs need radius scaled (use average for non-uniform)
+                // This is an approximation - true non-uniform scaling of arcs is complex
+                path.radius *= (scaleX + scaleY) / 2;
+            } else if (path.type === 'circle') {
+                path.radius *= (scaleX + scaleY) / 2;
+            }
+        }
+    }
+    // Recursively scale nested models
+    if (model.models) {
+        for (const modelId in model.models) {
+            applyNonUniformScale(model.models[modelId], scaleX, scaleY);
+        }
+    }
+    // Scale the model's own origin if it has one
+    if (model.origin) {
+        model.origin[0] *= scaleX;
+        model.origin[1] *= scaleY;
+    }
 }
 
 async function createDxf(svgPath, outputDir, baseName) {
@@ -86,19 +158,35 @@ async function createDxf(svgPath, outputDir, baseName) {
   let i = 0;
 
   const processElement = (element, model) => {
-    // Mirror the model on the Y-axis to correct for SVG coordinate system
-    // Mirror the model on the X-axis to correct for SVG's inverted Y coordinate system
-    let finalModel = makerjs.model.mirror(model, false, false);
+    let finalModel = model;
 
     // Check for and apply transformations from the SVG element
     const transform = $(element).attr('transform');
     if (transform) {
-        const translation = parseTransform(transform);
-        if (translation.x !== 0 || translation.y !== 0) {
-            finalModel = makerjs.model.move(finalModel, [translation.x, translation.y]);
+        const t = parseTransform(transform);
+
+        // Apply scale first (before translation)
+        // Note: makerjs only supports uniform scaling with a single number
+        // For non-uniform scaling, we scale X and Y separately by manipulating paths
+        if (t.scaleX !== 1 || t.scaleY !== 1) {
+            if (Math.abs(t.scaleX - t.scaleY) / Math.max(t.scaleX, t.scaleY) < 0.1) {
+                // Nearly uniform scaling - use average for best approximation
+                const avgScale = (t.scaleX + t.scaleY) / 2;
+                finalModel = makerjs.model.scale(finalModel, avgScale);
+            } else {
+                // Non-uniform scaling - apply to all points manually
+                applyNonUniformScale(finalModel, t.scaleX, t.scaleY);
+            }
+        }
+
+        // Apply translation
+        // Note: Y translation is negated because makerjs inverts Y when importing SVG paths
+        // (SVG Y increases downward, DXF/makerjs Y increases upward)
+        if (t.translateX !== 0 || t.translateY !== 0) {
+            finalModel = makerjs.model.move(finalModel, [t.translateX, -t.translateY]);
         }
     }
-    
+
     combinedModel.models[`shape${i++}`] = finalModel;
   };
 
