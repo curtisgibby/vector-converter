@@ -25,6 +25,7 @@
   "build": {
     "appId": "com.cgibby.vectorconverter",
     "productName": "Vector Converter",
+    "icon": "resources/icon",
     "files": [
       "main.js",
       "index.html",
@@ -36,10 +37,12 @@
       "node_modules/sharp/**"
     ],
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "resources/icon.icns"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "resources/icon.ico"
     }
   }
 }
