@@ -4,6 +4,53 @@ const fs = require('fs').promises;
 const sharp = require('sharp');
 const cheerio = require('cheerio');
 const makerjs = require('makerjs');
+const { transformPath, pathToString } = require('svg-path-commander');
+
+// Parse SVG transform attribute into svg-path-commander format
+function parseSvgTransform(transformStr) {
+  const result = {};
+
+  // Match scale(x, y) or scale(x)
+  const scaleMatch = /scale\s*\(\s*([0-9.e+-]+)(?:\s*,\s*([0-9.e+-]+))?\s*\)/i.exec(transformStr);
+  if (scaleMatch) {
+    const sx = parseFloat(scaleMatch[1]);
+    const sy = scaleMatch[2] ? parseFloat(scaleMatch[2]) : sx;
+    result.scale = [sx, sy];
+  }
+
+  // Match translate(x, y) or translate(x)
+  const translateMatch = /translate\s*\(\s*([0-9.e+-]+)(?:\s*,\s*([0-9.e+-]+))?\s*\)/i.exec(transformStr);
+  if (translateMatch) {
+    const tx = parseFloat(translateMatch[1]);
+    const ty = translateMatch[2] ? parseFloat(translateMatch[2]) : 0;
+    result.translate = [tx, ty];
+  }
+
+  // Match rotate(angle) or rotate(angle, cx, cy)
+  const rotateMatch = /rotate\s*\(\s*([0-9.e+-]+)(?:\s*,\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+))?\s*\)/i.exec(transformStr);
+  if (rotateMatch) {
+    result.rotate = parseFloat(rotateMatch[1]);
+    if (rotateMatch[2] && rotateMatch[3]) {
+      result.origin = [parseFloat(rotateMatch[2]), parseFloat(rotateMatch[3])];
+    }
+  }
+
+  // Match matrix(a, b, c, d, e, f)
+  const matrixMatch = /matrix\s*\(\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+)\s*\)/i.exec(transformStr);
+  if (matrixMatch) {
+    // For matrix, we need to decompose or apply directly
+    // svg-path-commander doesn't have direct matrix support via object, so we use scale + translate approximation
+    // This is a simplification - full matrix support would need more work
+    const a = parseFloat(matrixMatch[1]);
+    const d = parseFloat(matrixMatch[4]);
+    const e = parseFloat(matrixMatch[5]);
+    const f = parseFloat(matrixMatch[6]);
+    result.scale = [a, d];
+    result.translate = [e, f];
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -30,216 +77,118 @@ app.on('activate', () => {
 
 // --- IPC Handlers ---
 
-ipcMain.handle('open-file-dialog', async (event, options) => {
+ipcMain.handle('open-file-dialog', async (_, options) => {
   const { canceled, filePaths } = await dialog.showOpenDialog(options);
   if (canceled || !filePaths || filePaths.length === 0) return null;
   return filePaths[0];
 });
 
-ipcMain.handle('open-external-link', (event, url) => {
+ipcMain.handle('open-external-link', (_, url) => {
   shell.openExternal(url);
 });
 
-// Helper function to parse SVG transform attributes (matrix, translate, scale)
-function parseTransform(transformString) {
-    const result = { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1 };
-
-    // Handle matrix(a, b, c, d, e, f) transforms
-    // Matrix: | a c e |  where e,f are translation and a,d are scale (when b,c are 0)
-    //         | b d f |
-    const matrixMatch = /matrix\(\s*([^,\s]+)[\s,]+([^,\s]+)[\s,]+([^,\s]+)[\s,]+([^,\s]+)[\s,]+([^,\s]+)[\s,]+([^,\s]+)\s*\)/.exec(transformString);
-    if (matrixMatch) {
-        const a = parseFloat(matrixMatch[1]);
-        const b = parseFloat(matrixMatch[2]);
-        const c = parseFloat(matrixMatch[3]);
-        const d = parseFloat(matrixMatch[4]);
-        const e = parseFloat(matrixMatch[5]);
-        const f = parseFloat(matrixMatch[6]);
-
-        // Extract scale (works correctly when there's no rotation/skew, i.e., b=c=0)
-        result.scaleX = Math.sqrt(a * a + b * b);
-        result.scaleY = Math.sqrt(c * c + d * d);
-        // Preserve sign of scale
-        if (a < 0) result.scaleX = -result.scaleX;
-        if (d < 0) result.scaleY = -result.scaleY;
-
-        result.translateX = e;
-        result.translateY = f;
-        return result;
-    }
-
-    // Handle translate(x, y) transforms
-    const translateMatch = /translate\(\s*([^,\s)]+)[\s,]*([^,\s)]*)?\s*\)/.exec(transformString);
-    if (translateMatch) {
-        result.translateX = parseFloat(translateMatch[1]) || 0;
-        result.translateY = parseFloat(translateMatch[2]) || 0;
-    }
-
-    // Handle scale(sx, sy) transforms
-    const scaleMatch = /scale\(\s*([^,\s)]+)[\s,]*([^,\s)]*)?\s*\)/.exec(transformString);
-    if (scaleMatch) {
-        result.scaleX = parseFloat(scaleMatch[1]) || 1;
-        result.scaleY = parseFloat(scaleMatch[2]) || result.scaleX; // If sy not provided, use sx
-    }
-
-    return result;
-}
-
-// Helper function to apply non-uniform scaling to a makerjs model
-function applyNonUniformScale(model, scaleX, scaleY) {
-    // Scale all paths in the model
-    if (model.paths) {
-        for (const pathId in model.paths) {
-            const path = model.paths[pathId];
-            if (path.origin) {
-                path.origin[0] *= scaleX;
-                path.origin[1] *= scaleY;
-            }
-            if (path.type === 'line') {
-                // Lines have origin and end
-                if (path.end) {
-                    path.end[0] *= scaleX;
-                    path.end[1] *= scaleY;
-                }
-            } else if (path.type === 'arc') {
-                // Arcs need radius scaled (use average for non-uniform)
-                // This is an approximation - true non-uniform scaling of arcs is complex
-                path.radius *= (scaleX + scaleY) / 2;
-            } else if (path.type === 'circle') {
-                path.radius *= (scaleX + scaleY) / 2;
-            }
-        }
-    }
-    // Recursively scale nested models
-    if (model.models) {
-        for (const modelId in model.models) {
-            applyNonUniformScale(model.models[modelId], scaleX, scaleY);
-        }
-    }
-    // Scale the model's own origin if it has one
-    if (model.origin) {
-        model.origin[0] *= scaleX;
-        model.origin[1] *= scaleY;
-    }
-}
-
 async function createDxf(svgPath, outputDir, baseName) {
   // Create DXF with dimensions matching the SVG's declared physical size.
-  // Scales viewBox coordinates to millimeters and sets $INSUNITS header.
+  // Uses svg-path-commander to apply transforms and makerjs for DXF export.
   const outputPath = path.join(outputDir, `${baseName}.dxf`);
   const svgContent = await fs.readFile(svgPath, 'utf-8');
 
+  // Parse SVG
   const $ = cheerio.load(svgContent, { xmlMode: true });
+  const $svgRoot = $('svg');
 
-  const combinedModel = { models: {} };
+  // Calculate scale factor from SVG declared dimensions vs viewBox
+  const scaleToInches = getSvgScaleToInches($svgRoot);
+  console.log('Scale to inches:', scaleToInches);
 
-  // Helper: calculate scale factor from SVG declared dimensions vs viewBox.
-  // Returns scale to convert viewBox units to millimeters.
-  function getSvgScaleToMm($svgRoot) {
-    const vb = $svgRoot.attr('viewBox');
-    if (!vb) return null;
+  // Collect all paths with their transforms applied
+  const allPaths = [];
 
-    const parts = vb.trim().split(/\s+/);
-    if (parts.length !== 4) return null;
+  $('path').each(function () {
+    const $el = $(this);
+    const d = $el.attr('d');
+    if (!d) return;
 
-    const vbWidth = parseFloat(parts[2]);
-    const vbHeight = parseFloat(parts[3]);
-    if (!vbWidth || !vbHeight) return null;
+    // Get transform attribute
+    const transform = $el.attr('transform');
 
-    // Try to get declared physical dimensions
-    const wAttr = $svgRoot.attr('width');
-    const hAttr = $svgRoot.attr('height');
-
-    // Parse width to mm
-    let declaredWidthMm = null;
-    if (wAttr) {
-      if (/mm$/i.test(wAttr)) declaredWidthMm = parseFloat(wAttr);
-      else if (/in$/i.test(wAttr)) declaredWidthMm = parseFloat(wAttr) * 25.4;
-    }
-
-    // Parse height to mm
-    let declaredHeightMm = null;
-    if (hAttr) {
-      if (/mm$/i.test(hAttr)) declaredHeightMm = parseFloat(hAttr);
-      else if (/in$/i.test(hAttr)) declaredHeightMm = parseFloat(hAttr) * 25.4;
-    }
-
-    // Calculate scale from whichever dimension is declared
-    if (declaredWidthMm) return declaredWidthMm / vbWidth;
-    if (declaredHeightMm) return declaredHeightMm / vbHeight;
-
-    // No declared dimensions with units - assume viewBox is already in mm
-    return 1;
-  }
-
-  let i = 0;
-
-  const processElement = (element, model) => {
-    let finalModel = model;
-
-    // Check for and apply transformations from the SVG element
-    const transform = $(element).attr('transform');
+    // Apply transform to path data using svg-path-commander
+    let transformedD = d;
     if (transform) {
-        const t = parseTransform(transform);
-
-        // Apply scale first (before translation)
-        // Note: makerjs only supports uniform scaling with a single number
-        // For non-uniform scaling, we scale X and Y separately by manipulating paths
-        if (t.scaleX !== 1 || t.scaleY !== 1) {
-            if (Math.abs(t.scaleX - t.scaleY) / Math.max(t.scaleX, t.scaleY) < 0.1) {
-                // Nearly uniform scaling - use average for best approximation
-                const avgScale = (t.scaleX + t.scaleY) / 2;
-                finalModel = makerjs.model.scale(finalModel, avgScale);
-            } else {
-                // Non-uniform scaling - apply to all points manually
-                applyNonUniformScale(finalModel, t.scaleX, t.scaleY);
-            }
+      try {
+        const transformObj = parseSvgTransform(transform);
+        if (transformObj) {
+          const transformed = transformPath(d, transformObj);
+          transformedD = pathToString(transformed);
+          console.log(`Applied transform ${transform} ->`, JSON.stringify(transformObj));
         }
-
-        // Apply translation
-        // Note: Y translation is negated because makerjs inverts Y when importing SVG paths
-        // (SVG Y increases downward, DXF/makerjs Y increases upward)
-        if (t.translateX !== 0 || t.translateY !== 0) {
-            finalModel = makerjs.model.move(finalModel, [t.translateX, -t.translateY]);
-        }
+      } catch (err) {
+        console.warn('Failed to apply transform to path:', err.message);
+      }
     }
 
-    combinedModel.models[`shape${i++}`] = finalModel;
-  };
+    allPaths.push(transformedD);
+  });
 
-  $('path, polyline, polygon').each((index, element) => {
-    const $element = $(element);
-    if (element.tagName === 'path') {
-      const pathData = $element.attr('d');
-      if (pathData) processElement(element, makerjs.importer.fromSVGPathData(pathData));
-    } else if (element.tagName === 'polyline') {
-      const pointsData = $element.attr('points');
-      if (pointsData) processElement(element, new makerjs.models.ConnectTheDots(false, pointsData));
-    } else if (element.tagName === 'polygon') {
-      const pointsData = $element.attr('points');
-      if (pointsData) processElement(element, new makerjs.models.ConnectTheDots(true, pointsData));
+  console.log('Found paths:', allPaths.length);
+
+  // Convert paths to makerjs model
+  const models = {};
+  allPaths.forEach((pathD, index) => {
+    try {
+      const pathModel = makerjs.importer.fromSVGPathData(pathD);
+      models[`path_${index}`] = pathModel;
+    } catch (err) {
+      console.warn(`Failed to import path ${index}:`, err.message);
     }
   });
 
-  // --- Scale model based on SVG's declared dimensions vs viewBox ---
-  const $svgRoot = $('svg');
-  const scaleToMm = getSvgScaleToMm($svgRoot);
-  if (scaleToMm && scaleToMm !== 1) {
-    makerjs.model.scale(combinedModel, scaleToMm);
+  const combinedModel = { models };
+
+  // Scale model to inches
+  if (scaleToInches && scaleToInches !== 1) {
+    makerjs.model.scale(combinedModel, scaleToInches);
   }
 
-  let dxf = makerjs.exporter.toDXF(combinedModel);
+  // Flip Y axis (SVG Y-down to DXF Y-up)
+  makerjs.model.scale(combinedModel, 1, { scaleY: -1 });
 
-  // --- Inject $INSUNITS header to signal millimetres (4) ---
-  if (scaleToMm) {
-    // Insert INSUNITS just before the ENDSEC following HEADER section
-    dxf = dxf.replace(/(2\nHEADER[\s\S]*?)0\nENDSEC/, (match) => {
-      return match.replace('0\nENDSEC', '  9\n$INSUNITS\n 70\n     4\n0\nENDSEC');
-    });
-  }
+  // Export to DXF
+  const dxf = makerjs.exporter.toDXF(combinedModel, { units: 'inch' });
 
   await fs.writeFile(outputPath, dxf);
 }
+
+// Helper: calculate scale factor from SVG declared dimensions vs viewBox (to inches).
+function getSvgScaleToInches($svgRoot) {
+  const vb = $svgRoot.attr('viewBox');
+  if (!vb) return 1;
+
+  const parts = vb.trim().split(/\s+/);
+  if (parts.length !== 4) return 1;
+
+  const vbWidth = parseFloat(parts[2]);
+  const vbHeight = parseFloat(parts[3]);
+  if (!vbWidth || !vbHeight) return 1;
+
+  const wAttr = $svgRoot.attr('width');
+  const hAttr = $svgRoot.attr('height');
+
+  // Parse width to inches
+  if (wAttr) {
+    if (/in$/i.test(wAttr)) return parseFloat(wAttr) / vbWidth;
+    if (/mm$/i.test(wAttr)) return (parseFloat(wAttr) / 25.4) / vbWidth;
+  }
+
+  // Parse height to inches
+  if (hAttr) {
+    if (/in$/i.test(hAttr)) return parseFloat(hAttr) / vbHeight;
+    if (/mm$/i.test(hAttr)) return (parseFloat(hAttr) / 25.4) / vbHeight;
+  }
+
+  return 1;
+}
+
 
 function colorizeSvg(svgContent, color) {
   const $ = cheerio.load(svgContent, { xmlMode: true });
@@ -338,16 +287,14 @@ ipcMain.on('generate-files', async (event, { svgPath, bgImagePath, color, colorN
         overlayBuffer = await sharp(Buffer.from(coloredSvg)).png().toBuffer();
       }
 
+      const bgBase = path.basename(bgImagePath, path.extname(bgImagePath));
+      const kebabBaseName = toKebabCase(baseName);
+      const kebabBgBase = toKebabCase(bgBase);
+      const kebabColorName = toKebabCase(colorName || 'custom');
+      const mockupName = `${kebabBaseName}-${kebabBgBase}-${kebabColorName}-mockup.png`;
       await sharp(bgImagePath)
         .composite([{ input: overlayBuffer, gravity: 'center' }])
-                const bgBase = path.basename(bgImagePath, path.extname(bgImagePath));
-        const kebabBaseName = toKebabCase(baseName);
-        const kebabBgBase = toKebabCase(bgBase);
-        const kebabColorName = toKebabCase(colorName || 'custom');
-        const mockupName = `${kebabBaseName}-${kebabBgBase}-${kebabColorName}-mockup.png`;
-        await sharp(bgImagePath)
-          .composite([{ input: overlayBuffer, gravity: 'center' }])
-          .toFile(path.join(outputDir, mockupName));
+        .toFile(path.join(outputDir, mockupName));
     }
 
     event.sender.send('generation-complete', 'Files generated successfully!');
