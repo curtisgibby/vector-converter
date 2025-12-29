@@ -99,7 +99,6 @@ async function createDxf(svgPath, outputDir, baseName) {
 
   // Calculate scale factor from SVG declared dimensions vs viewBox
   const scaleToInches = getSvgScaleToInches($svgRoot);
-  console.log('Scale to inches:', scaleToInches);
 
   // Collect all paths with their transforms applied
   const allPaths = [];
@@ -120,7 +119,6 @@ async function createDxf(svgPath, outputDir, baseName) {
         if (transformObj) {
           const transformed = transformPath(d, transformObj);
           transformedD = pathToString(transformed);
-          console.log(`Applied transform ${transform} ->`, JSON.stringify(transformObj));
         }
       } catch (err) {
         console.warn('Failed to apply transform to path:', err.message);
@@ -129,8 +127,6 @@ async function createDxf(svgPath, outputDir, baseName) {
 
     allPaths.push(transformedD);
   });
-
-  console.log('Found paths:', allPaths.length);
 
   // Convert paths to makerjs model
   const models = {};
