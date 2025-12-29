@@ -38,14 +38,26 @@ function parseSvgTransform(transformStr) {
   // Match matrix(a, b, c, d, e, f)
   const matrixMatch = /matrix\s*\(\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+)\s*,\s*([0-9.e+-]+)\s*\)/i.exec(transformStr);
   if (matrixMatch) {
-    // For matrix, we need to decompose or apply directly
-    // svg-path-commander doesn't have direct matrix support via object, so we use scale + translate approximation
-    // This is a simplification - full matrix support would need more work
+    // Decompose matrix into rotation, scale, and translation
+    // SVG matrix: | a c e |
+    //             | b d f |
     const a = parseFloat(matrixMatch[1]);
+    const b = parseFloat(matrixMatch[2]);
+    const c = parseFloat(matrixMatch[3]);
     const d = parseFloat(matrixMatch[4]);
     const e = parseFloat(matrixMatch[5]);
     const f = parseFloat(matrixMatch[6]);
-    result.scale = [a, d];
+
+    // Calculate rotation angle (in degrees)
+    const rotation = Math.atan2(b, a) * (180 / Math.PI);
+
+    // Calculate scale factors
+    const scaleX = Math.sqrt(a * a + b * b);
+    const det = a * d - b * c; // determinant
+    const scaleY = det / scaleX;
+
+    result.rotate = rotation;
+    result.scale = [scaleX, scaleY];
     result.translate = [e, f];
   }
 
@@ -108,16 +120,22 @@ async function createDxf(svgPath, outputDir, baseName) {
     const d = $el.attr('d');
     if (!d) return;
 
-    // Get transform attribute
-    const transform = $el.attr('transform');
+    // Collect transforms from all ancestors (outermost to innermost) plus element's own
+    const transforms = [];
+    let current = $el;
+    while (current.length && current[0].tagName !== 'svg') {
+      const t = current.attr('transform');
+      if (t) transforms.unshift(t); // Add to front so outermost is first
+      current = current.parent();
+    }
 
-    // Apply transform to path data using svg-path-commander
+    // Apply all transforms in sequence
     let transformedD = d;
-    if (transform) {
+    for (const transform of transforms) {
       try {
         const transformObj = parseSvgTransform(transform);
         if (transformObj) {
-          const transformed = transformPath(d, transformObj);
+          const transformed = transformPath(transformedD, transformObj);
           transformedD = pathToString(transformed);
         }
       } catch (err) {
