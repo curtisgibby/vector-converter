@@ -1,6 +1,6 @@
 {
   "name": "vector-converter",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A tool to convert vector files and create mockups.",
   "main": "main.js",
   "scripts": {
@@ -17,6 +17,7 @@
     "electron-builder": "^26.0.12"
   },
   "dependencies": {
+    "@img/sharp-win32-x64": "^0.34.5",
     "cheerio": "^1.1.0",
     "makerjs": "^0.18.1",
     "sharp": "^0.34.5",
