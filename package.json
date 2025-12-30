@@ -26,6 +26,7 @@
     "appId": "com.curtisgibby.vectorconverter",
     "productName": "Vector Converter",
     "icon": "resources/icon",
+    "generateUpdatesFilesForAllChannels": false,
     "files": [
       "main.js",
       "index.html",
@@ -44,6 +45,12 @@
     "win": {
       "target": "nsis",
       "icon": "resources/icon.ico"
+    },
+    "dmg": {
+      "writeUpdateInfo": false
+    },
+    "nsis": {
+      "differentialPackage": false
     }
   }
 }
