@@ -1,6 +1,6 @@
 {
   "name": "vector-converter",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A tool to convert vector files and create mockups.",
   "main": "main.js",
   "scripts": {

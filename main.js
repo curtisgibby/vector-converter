@@ -110,7 +110,7 @@ async function createDxf(svgPath, outputDir, baseName) {
   const $svgRoot = $('svg');
 
   // Calculate scale factor from SVG declared dimensions vs viewBox
-  const scaleToInches = getSvgScaleToInches($svgRoot);
+  const scaleToMm = getSvgScaleToMm($svgRoot);
 
   // Collect all paths with their transforms applied
   const allPaths = [];
@@ -159,22 +159,22 @@ async function createDxf(svgPath, outputDir, baseName) {
 
   const combinedModel = { models };
 
-  // Scale model to inches
-  if (scaleToInches && scaleToInches !== 1) {
-    makerjs.model.scale(combinedModel, scaleToInches);
+  // Scale model to millimeters
+  if (scaleToMm && scaleToMm !== 1) {
+    makerjs.model.scale(combinedModel, scaleToMm);
   }
 
   // Flip Y axis (SVG Y-down to DXF Y-up)
   makerjs.model.scale(combinedModel, 1, { scaleY: -1 });
 
   // Export to DXF
-  const dxf = makerjs.exporter.toDXF(combinedModel, { units: 'inch' });
+  const dxf = makerjs.exporter.toDXF(combinedModel, { units: 'millimeter' });
 
   await fs.writeFile(outputPath, dxf);
 }
 
-// Helper: calculate scale factor from SVG declared dimensions vs viewBox (to inches).
-function getSvgScaleToInches($svgRoot) {
+// Helper: calculate scale factor from SVG declared dimensions vs viewBox (to mm).
+function getSvgScaleToMm($svgRoot) {
   const vb = $svgRoot.attr('viewBox');
   if (!vb) return 1;
 
@@ -188,16 +188,16 @@ function getSvgScaleToInches($svgRoot) {
   const wAttr = $svgRoot.attr('width');
   const hAttr = $svgRoot.attr('height');
 
-  // Parse width to inches
+  // Parse width to mm
   if (wAttr) {
-    if (/in$/i.test(wAttr)) return parseFloat(wAttr) / vbWidth;
-    if (/mm$/i.test(wAttr)) return (parseFloat(wAttr) / 25.4) / vbWidth;
+    if (/mm$/i.test(wAttr)) return parseFloat(wAttr) / vbWidth;
+    if (/in$/i.test(wAttr)) return (parseFloat(wAttr) * 25.4) / vbWidth;
   }
 
-  // Parse height to inches
+  // Parse height to mm
   if (hAttr) {
-    if (/in$/i.test(hAttr)) return parseFloat(hAttr) / vbHeight;
-    if (/mm$/i.test(hAttr)) return (parseFloat(hAttr) / 25.4) / vbHeight;
+    if (/mm$/i.test(hAttr)) return parseFloat(hAttr) / vbHeight;
+    if (/in$/i.test(hAttr)) return (parseFloat(hAttr) * 25.4) / vbHeight;
   }
 
   return 1;
