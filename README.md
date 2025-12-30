@@ -15,7 +15,7 @@ Electron desktop utility for turning SVG decals into:
 | 📐 **Real-world scaling** | Reads `width` / `height` in *in* or *mm*. If absent, assumes the SVG `viewBox` units are **millimetres**. |
 | 📁 **Batch assets** | Generates DXF, B/W PNG, and a colour mock-up in one click. |
 | 🖼️ **Mock-up overlay** | Filename parsing (e.g. `window_18in.jpg`) tells the app the physical width of the background photo so the overlay decal is sized correctly. |
-| 💾 **DXF export** | Uses Maker.js; writes `$INSUNITS = 4` (mm) and scales geometry so height = declared physical size. |
+| 💾 **DXF export** | Uses Maker.js with millimeter units; scales geometry to match declared physical size. |
 | 🧹 **Clean repo** | `output-files/` is git-ignored; only source SVGs track. |
 
 ## Installation
@@ -38,6 +38,8 @@ npm start
 Requires Node 22+ (see `.nvmrc`) and the system build tools Sharp needs (on macOS: `xcode-select --install`).
 
 ## Usage
+
+> **Note:** SVGs with text elements must have text converted to paths before importing. In Inkscape: select text, then **Path → Object to Path** (Shift+Ctrl+C).
 
 1. **Select SVG** – click *Select SVG* and pick your decal file.
 2. **Select background (optional)** – pick a JPG/PNG whose filename contains the physical width, e.g. `window_18in.jpg`.
