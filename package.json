@@ -30,7 +30,8 @@
       "main.js",
       "index.html",
       "preload.js",
-      "renderer.js"
+      "renderer.js",
+      "node_modules/**/*"
     ],
     "asarUnpack": [
       "node_modules/@img/sharp-*/**",
