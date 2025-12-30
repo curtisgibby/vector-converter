@@ -23,7 +23,7 @@
     "svg-path-commander": "^2.1.11"
   },
   "build": {
-    "appId": "com.cgibby.vectorconverter",
+    "appId": "com.curtisgibby.vectorconverter",
     "productName": "Vector Converter",
     "icon": "resources/icon",
     "files": [
